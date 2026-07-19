@@ -13,7 +13,7 @@ with st.sidebar:
     gemini_key = st.text_input("Enter Gemini API Key", type="password")
     google_key = st.text_input("Enter PageSpeed API Key", type="password")
     st.divider()
-    st.info("I will automatically find the best available model for your account.")
+    st.info("Stability Mode: Active. (Trying multiple models to bypass Google errors)")
 
 # 3. CORE FUNCTIONS
 def get_audit_data(url, api_key):
@@ -30,52 +30,51 @@ def analyze_and_write(url, seo, perf, gemini_key):
     try:
         genai.configure(api_key=gemini_key)
         
-        # --- SMART MODEL DISCOVERY ---
-        # This lists all models your key is allowed to use
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        # WATERFALL LIST: We try these in order. 
+        # 1.5-flash is the most stable free model globally.
+        model_names = [
+            'gemini-1.5-flash', 
+            'gemini-1.5-pro', 
+            'gemini-2.0-flash-exp', 
+            'models/gemini-1.5-flash'
+        ]
         
-        # We look for Flash models first because they are fast and have high free limits
-        best_model = None
-        for m_name in available_models:
-            if "flash" in m_name.lower():
-                best_model = m_name
-                break
-        
-        if not best_model:
-            best_model = available_models[0] # Fallback to first available
-
-        st.info(f"Connected using: {best_model}")
-        model = genai.GenerativeModel(best_model)
-        
-        # Scrape Website
         scrape_url = f"https://r.jina.ai/{url}"
-        web_text = requests.get(scrape_url).text[:3500] # Use 3500 to stay under token limits
+        web_text = requests.get(scrape_url).text[:3000]
         
         prompt = f"""
-        Act as a Direct Response Marketing Expert (think Gary Halbert or Dan Kennedy).
-        Analyze this business: {url}
+        Act as a Direct Response Marketing Expert.
+        Analyze business: {url}
         Data: SEO {seo}, Speed {perf}. 
         Content: {web_text}
         
-        Provide the following sections clearly labeled with '---':
-
         ---REPORT---
-        Perform a professional digital audit. Identify 'Leaking Revenue' (missing chatbots, slow speed, no booking). 
-        Use bullet points.
-
+        Audit the site for missing AI/automation and revenue leaks.
         ---WHATSAPP---
-        Create a short, high-conversion WhatsApp message. 
-        Structure: 1. Personalized observation. 2. The 'Gap'. 3. Low-friction CTA.
-        Use emojis. Max 50 words.
-
+        Short, high-conversion WhatsApp message with emojis (max 50 words).
         ---EMAIL---
-        Subject Line: (Give 2 punchy options)
-        Body: Use the PAS (Problem, Agitate, Solve) framework. 
-        Focus on 'Real World Proof'—explain why companies with AI booking grow 20% faster.
+        3 Subject Line options.
+        Body: Use PAS (Problem, Agitate, Solve) framework.
         """
+
+        # THE WATERFALL LOOP
+        response_text = ""
+        success = False
+        for m_name in model_names:
+            try:
+                model = genai.GenerativeModel(m_name)
+                response = model.generate_content(prompt)
+                response_text = response.text
+                success = True
+                st.sidebar.success(f"Connected via {m_name}")
+                break # Exit loop if it works
+            except Exception as e:
+                continue # Try the next model in the list
         
-        response = model.generate_content(prompt)
-        return response.text
+        if not success:
+            return "TECHNICAL ERROR: All Google models are currently busy or unavailable. Please check your API key or wait 60 seconds."
+            
+        return response_text
 
     except Exception as e:
         return f"TECHNICAL ERROR: {str(e)}"
@@ -87,7 +86,7 @@ if st.button("Generate Audit & Outreach"):
     if not gemini_key or not google_key:
         st.error("Please add keys in the sidebar.")
     else:
-        with st.spinner("AI is analyzing the business..."):
+        with st.spinner("AI is bypassing Google errors and analyzing..."):
             seo_score, perf_score = get_audit_data(target_url, google_key)
             full_text = analyze_and_write(target_url, seo_score, perf_score, gemini_key)
             
@@ -118,14 +117,14 @@ if st.button("Generate Audit & Outreach"):
                         clean = audit_out.encode('latin-1', 'ignore').decode('latin-1')
                         pdf.multi_cell(0, 10, txt=clean)
                         st.download_button("📩 Download PDF Report", bytes(pdf.output()), "Audit.pdf", "application/pdf")
-                    except: st.write("Copy report text manually.")
+                    except: st.write("Use copy-paste for report.")
 
                 with t2:
-                    st.subheader("WhatsApp Pitch (Short & Crisp)")
+                    st.subheader("WhatsApp Pitch (Direct & Short)")
                     st.code(wa_out, language="text")
-                    st.caption("Copy and paste this into WhatsApp Web.")
+                    st.caption("Perfect for cold outreach on WhatsApp.")
 
                 with t3:
-                    st.subheader("Email Pitch (High Conversion)")
+                    st.subheader("Email Pitch (Marketing Framework)")
                     st.code(email_out, language="text")
-                    st.caption("Use Subject Line 1 for highest open rates.")
+                    st.caption("Designed to hit pain points and trigger replies.")
