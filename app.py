@@ -4,157 +4,169 @@ import google.generativeai as genai
 from fpdf import FPDF
 import re
 
-# 1. COGNITO AI BRANDING & SETUP
-st.set_page_config(page_title="Cognito AI Sales Copilot", layout="wide", page_icon="🤖")
+# 1. PAGE CONFIG & BRANDING
+st.set_page_config(page_title="Cognito AI Copilot", layout="wide", page_icon="🤖")
 
+# Custom CSS for a professional look
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .report-box { background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; }
+    .main { background-color: #f8f9fa; }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #ffffff; border-radius: 5px; border: 1px solid #eee; padding: 10px 20px; }
+    .stTabs [aria-selected="true"] { background-color: #007bff; color: white; border: 1px solid #007bff; }
+    div[data-testid="stMetricValue"] { color: #007bff; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🤖 Cognito AI Sales Copilot")
-st.subheader("Automated Business Intelligence & Audit Platform")
+st.title("🤖 Cognito AI Sales Intelligence")
+st.write("Professional Audit & Automation Roadmap")
 
-# 2. SIDEBAR - MODULE 1: BUSINESS PROFILE
+# 2. INPUTS
 with st.sidebar:
-    st.header("🏢 Module 1: Profile")
+    st.header("Business Profile")
     biz_name = st.text_input("Business Name")
-    target_url = st.text_input("Website URL (https://...)")
+    target_url = st.text_input("Website URL")
     city = st.text_input("City")
-    industry = st.selectbox("Industry", ["Healthcare", "Real Estate", "Legal", "Home Services", "Retail", "Other"])
     
     st.divider()
-    st.header("🔑 API Keys")
+    st.header("Settings")
     gemini_key = st.text_input("Gemini API Key", type="password").strip()
     google_key = st.text_input("PageSpeed API Key", type="password").strip()
 
-# 3. AUDIT ENGINE LOGIC
-def perform_technical_audit(url, api_key):
-    api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&category=SEO&category=PERFORMANCE&category=ACCESSIBILITY&category=BEST_PRACTICES&key={api_key}"
+# 3. LOGIC ENGINES
+def get_tech_scores(url, api_key):
+    api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&category=SEO&category=PERFORMANCE&key={api_key}"
     try:
         r = requests.get(api_url).json()
         lh = r['lighthouseResult']['categories']
-        return {
-            "seo": lh['seo']['score'] * 100,
-            "speed": lh['performance']['score'] * 100,
-            "access": lh['accessibility']['score'] * 100,
-            "best": lh['best-practices']['score'] * 100,
-            "mobile": r['lighthouseResult']['configSettings']['formFactor']
-        }
-    except:
-        return None
+        return round(lh['seo']['score'] * 100, 1), round(lh['performance']['score'] * 100, 1)
+    except: return "N/A", "N/A"
 
-def detect_ai_readiness(html_text):
-    # Search for common signatures
-    patterns = {
-        "Chatbot": r"(intercom|drift|tidio|crisp|chat|messenger)",
-        "WhatsApp": r"(wa\.me|whatsapp|api\.whatsapp)",
-        "Booking": r"(calendly|acuity|booker|appointment|resurva)",
-        "CRM/Forms": r"(hubspot|marketo|salesforce|contact-form|lead-capture)",
-        "Payments": r"(stripe|paypal|checkout|pay)"
-    }
-    results = {}
-    for tech, pattern in patterns.items():
-        results[tech] = bool(re.search(pattern, html_text.lower()))
-    return results
-
-# 4. AI ANALYSIS ENGINE (GEMINI 3)
-def generate_copilot_report(biz_data, tech_data, ai_ready, web_content, gemini_key):
+def generate_report(biz_name, url, city, seo, perf, gemini_key):
     genai.configure(api_key=gemini_key)
     model = genai.GenerativeModel("gemini-3-flash-preview")
     
+    scrape_url = f"https://r.jina.ai/{url}"
+    web_content = requests.get(scrape_url).text[:4000]
+    
     prompt = f"""
-    You are the Cognito AI Sales Copilot. Perform a deep audit for {biz_data['name']} in {biz_data['city']}.
-    
-    DATA:
-    - Technical Scores: SEO {tech_data['seo']}, Speed {tech_data['speed']}, Accessibility {tech_data['access']}
-    - Tech Detected: {ai_ready}
-    - Content Snippet: {web_content[:3000]}
+    You are the Cognito AI Sales Copilot.
+    Audit for: {biz_name} in {city}.
+    URL: {url}
+    Technical: SEO {seo}, Speed {perf}.
+    Content: {web_content}
 
-    YOUR TASK: Generate a high-end Agency Report.
+    FOCUS ON AI CHATBOT SALES. 
+    NOTE: They have a manual WhatsApp button. Agitate the fact that manual replies cause lead drop-off.
+
+    Provide the report in exactly these sections:
+    [AI_READINESS]
+    Score out of 100. List what's missing: AI Chatbot, 24/7 Automation, AI Lead Qualification.
     
-    Format the output in exactly these sections:
-    
-    [AI_SCORE]
-    Calculate a score out of 100 for 'AI Readiness'. List 6 specific items with ✅ or ❌.
+    [COMPETITOR_SNAPSHOT]
+    Identify 2 typical local competitors in {city} and compare their likely AI adoption vs this business.
     
     [OPPORTUNITIES]
-    List 4 specific 'Opportunity Detection' statements. (e.g. "Website visitors have no immediate way to ask questions after business hours.")
+    List 3 specific revenue-generating opportunities (e.g. AI Appointment Booking).
     
-    [ROI]
-    Provide a table-style ROI Estimator showing Potential Impact of AI Automation.
-    
-    [ROADMAP]
-    A 3-step implementation roadmap to move the business to an AI-First model.
+    [ROI_ESTIMATOR]
+    A table showing manual handling vs AI automation costs and lead capture rates.
+
+    [WHATSAPP_PITCH]
+    A short, click-worthy message for the owner. Use the PAS framework. Mention their manual WhatsApp button vs an AI Agent.
+
+    [EMAIL_PITCH]
+    Subject lines + Body. High-end marketing psychology.
     """
     
     response = model.generate_content(prompt)
     return response.text
 
-# 5. EXECUTION UI
-if st.button("🚀 Run Full Cognito Audit"):
-    if not gemini_key or not google_key or not target_url:
-        st.error("Missing inputs. Please check Profile and API keys.")
-    else:
-        with st.spinner("Module 2 & 3: Scanning Website & SEO..."):
-            tech_data = perform_technical_audit(target_url, google_key)
-            
-        with st.spinner("Module 4: Detecting AI Readiness..."):
-            scrape_url = f"https://r.jina.ai/{target_url}"
-            web_raw = requests.get(scrape_url).text
-            ai_ready = detect_ai_readiness(web_raw)
-            
-        if tech_data:
-            with st.spinner("Generating Copilot Intelligence..."):
-                report = generate_copilot_report(
-                    {"name": biz_name, "city": city}, 
-                    tech_data, ai_ready, web_raw, gemini_key
-                )
-                
-                # PARSING THE REPORT
-                def get_sec(t, m):
-                    try: return t.split(m)[1].split("[")[0].strip()
-                    except: return "Data missing."
+# 4. BEAUTIFUL PDF GENERATOR
+class PDF(FPDF):
+    def header(self):
+        self.set_fill_color(0, 123, 255) # Blue Header
+        self.rect(0, 0, 210, 40, 'F')
+        self.set_text_color(255, 255, 255)
+        self.set_font('Arial', 'B', 24)
+        self.cell(0, 20, 'COGNITO AI SALES AUDIT', ln=True, align='C')
+        self.ln(10)
 
-                st.success("Audit Complete!")
-                
-                # --- VISUAL DASHBOARD ---
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("SEO Score", f"{tech_data['seo']}%")
-                col2.metric("Speed", f"{tech_data['speed']}%")
-                col3.metric("Accessibility", f"{tech_data['access']}%")
-                col4.metric("Best Practices", f"{tech_data['best']}%")
-
-                t1, t2, t3, t4 = st.tabs(["🎯 AI Readiness", "💡 Opportunities", "📈 ROI Estimator", "🗺️ Roadmap"])
-                
-                with t1:
-                    st.markdown("### Module 4: AI Readiness Score")
-                    st.markdown(get_sec(report, "[AI_SCORE]"))
-                    
-                with t2:
-                    st.markdown("### Module 6: Opportunity Detection")
-                    st.markdown(get_sec(report, "[OPPORTUNITIES]"))
-                    
-                with t3:
-                    st.markdown("### Module 7: ROI Estimator")
-                    st.info("Assumptions based on industry standards for " + industry)
-                    st.markdown(get_sec(report, "[ROI]"))
-                    
-                with t4:
-                    st.markdown("### Module 8: Implementation Roadmap")
-                    st.markdown(get_sec(report, "[ROADMAP]"))
-                    
-                    # PDF GENERATION
-                    pdf = FPDF()
-                    pdf.add_page()
-                    pdf.set_font("Arial", 'B', 16)
-                    pdf.cell(200, 10, txt=f"COGNITO AI AUDIT: {biz_name}", ln=True, align='C')
-                    pdf.set_font("Arial", size=12)
-                    pdf.multi_cell(0, 10, txt=report.encode('latin-1', 'ignore').decode('latin-1'))
-                    st.download_button("📩 Download Professional PDF Report", bytes(pdf.output()), "Cognito_Audit.pdf")
-
+def create_beautiful_pdf(report_text, biz_name):
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Arial", size=12)
+    pdf.set_text_color(0, 0, 0)
+    
+    # Clean text
+    clean_text = report_text.encode('latin-1', 'ignore').decode('latin-1')
+    sections = clean_text.split("[")
+    
+    for section in sections:
+        if not section.strip(): continue
+        # Highlight Headers
+        header_end = section.find("]")
+        if header_end != -1:
+            header_text = section[:header_end].replace("_", " ")
+            pdf.set_font('Arial', 'B', 14)
+            pdf.set_text_color(0, 123, 255)
+            pdf.cell(0, 10, header_text.upper(), ln=True)
+            pdf.set_font('Arial', '', 11)
+            pdf.set_text_color(50, 50, 50)
+            pdf.multi_cell(0, 8, section[header_end+1:].strip())
+            pdf.ln(5)
         else:
-            st.error("Technical scan failed. Check the URL and Google API Key.")
+            pdf.multi_cell(0, 8, section.strip())
+            
+    return pdf.output()
+
+# 5. UI EXECUTION
+if st.button("🚀 Run Full Intelligence Audit"):
+    if not (biz_name and target_url and gemini_key and google_key):
+        st.error("Please fill in all profile details and API keys.")
+    else:
+        with st.spinner("Analyzing your prospect..."):
+            seo, perf = get_tech_scores(target_url, google_key)
+            full_report = generate_report(biz_name, target_url, city, seo, perf, gemini_key)
+            
+            # Parsing Sections
+            def get_sec(tag):
+                try: return full_report.split(f"[{tag}]")[1].split("[")[0].strip()
+                except: return "Section not found."
+
+            st.success(f"Audit Complete for {biz_name}")
+            
+            # --- DASHBOARD ---
+            m1, m2, m3 = st.columns(3)
+            m1.metric("SEO Score", f"{seo}%")
+            m2.metric("Site Speed", f"{perf}%")
+            m3.metric("Chatbot Status", "❌ Manual Only")
+
+            t1, t2, t3, t4, t5 = st.tabs(["📊 Audit", "🏆 Competitors", "💰 ROI & Ops", "💬 WhatsApp Pitch", "✉️ Email Pitch"])
+            
+            with t1:
+                st.markdown("### AI Readiness Score")
+                st.markdown(get_sec("AI_READINESS"))
+                # PDF BUTTON
+                pdf_bytes = create_beautiful_pdf(full_report, biz_name)
+                st.download_button("📩 Download Beautiful PDF Report", data=bytes(pdf_bytes), file_name=f"{biz_name}_Cognito_Audit.pdf", mime="application/pdf")
+
+            with t2:
+                st.markdown("### Competitor Snapshot")
+                st.markdown(get_sec("COMPETITOR_SNAPSHOT"))
+
+            with t3:
+                st.markdown("### Opportunity & ROI")
+                st.markdown(get_sec("OPPORTUNITIES"))
+                st.divider()
+                st.markdown(get_sec("ROI_ESTIMATOR"))
+
+            with t4:
+                st.subheader("WhatsApp Pitch (One-Click Copy)")
+                st.code(get_sec("WHATSAPP_PITCH"), language="text")
+                st.caption("Focuses on the 'Manual WhatsApp' time-drain.")
+
+            with t5:
+                st.subheader("Email Campaign")
+                st.code(get_sec("EMAIL_PITCH"), language="text")
