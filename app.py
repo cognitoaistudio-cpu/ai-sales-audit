@@ -13,7 +13,7 @@ with st.sidebar:
     gemini_key = st.text_input("Enter Gemini API Key", type="password")
     google_key = st.text_input("Enter PageSpeed API Key", type="password")
     st.divider()
-    st.info("Tip: If you get a 'Quota Error', wait 60 seconds and try again.")
+    st.info("I will automatically find the best available model for your account.")
 
 # 3. CORE FUNCTIONS
 def get_audit_data(url, api_key):
@@ -30,34 +30,54 @@ def analyze_and_write(url, seo, perf, gemini_key):
     try:
         genai.configure(api_key=gemini_key)
         
-        # PRIORITIZE 1.5 FLASH for higher free-tier limits
-        # We try 1.5 Flash first, then 1.5 Pro, then whatever is available
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # --- SMART MODEL DISCOVERY ---
+        # This lists all models your key is allowed to use
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         
+        # We look for Flash models first because they are fast and have high free limits
+        best_model = None
+        for m_name in available_models:
+            if "flash" in m_name.lower():
+                best_model = m_name
+                break
+        
+        if not best_model:
+            best_model = available_models[0] # Fallback to first available
+
+        st.info(f"Connected using: {best_model}")
+        model = genai.GenerativeModel(best_model)
+        
+        # Scrape Website
         scrape_url = f"https://r.jina.ai/{url}"
-        # We limit text to 3000 characters to save "Tokens" (this prevents 429 errors)
-        web_text = requests.get(scrape_url).text[:3000]
+        web_text = requests.get(scrape_url).text[:3500] # Use 3500 to stay under token limits
         
         prompt = f"""
-        Act as a Sales Marketer. Website: {url}. Data: SEO {seo}, Speed {perf}. 
-        Web Context: {web_text}
+        Act as a Direct Response Marketing Expert (think Gary Halbert or Dan Kennedy).
+        Analyze this business: {url}
+        Data: SEO {seo}, Speed {perf}. 
+        Content: {web_text}
         
-        Provide:
+        Provide the following sections clearly labeled with '---':
+
         ---REPORT---
-        Audit the site for missing AI/automation.
+        Perform a professional digital audit. Identify 'Leaking Revenue' (missing chatbots, slow speed, no booking). 
+        Use bullet points.
+
         ---WHATSAPP---
-        Short, crisp pitch with emojis.
+        Create a short, high-conversion WhatsApp message. 
+        Structure: 1. Personalized observation. 2. The 'Gap'. 3. Low-friction CTA.
+        Use emojis. Max 50 words.
+
         ---EMAIL---
-        Subject: Found a gap in {url}
-        Body: PAS framework pitch.
+        Subject Line: (Give 2 punchy options)
+        Body: Use the PAS (Problem, Agitate, Solve) framework. 
+        Focus on 'Real World Proof'—explain why companies with AI booking grow 20% faster.
         """
         
         response = model.generate_content(prompt)
         return response.text
 
     except Exception as e:
-        if "429" in str(e):
-            return "TECHNICAL ERROR: Google's free limit reached. Please wait 1 minute and click the button again."
         return f"TECHNICAL ERROR: {str(e)}"
 
 # 4. THE USER INTERFACE
@@ -67,46 +87,45 @@ if st.button("Generate Audit & Outreach"):
     if not gemini_key or not google_key:
         st.error("Please add keys in the sidebar.")
     else:
-        with st.spinner("Analyzing... (Google Free Tier may take a moment)"):
+        with st.spinner("AI is analyzing the business..."):
             seo_score, perf_score = get_audit_data(target_url, google_key)
-            full_response = analyze_and_write(target_url, seo_score, perf_score, gemini_key)
+            full_text = analyze_and_write(target_url, seo_score, perf_score, gemini_key)
             
-            if "TECHNICAL ERROR" in full_response:
-                st.error(full_response)
+            if "TECHNICAL ERROR" in full_text:
+                st.error(full_text)
             else:
-                # SPLITTING LOGIC
-                try:
-                    parts = full_response.split("---")
-                    # We look for keywords to ensure we get the right sections
-                    audit_content = ""
-                    whatsapp_content = ""
-                    email_content = ""
-                    for part in parts:
-                        if "REPORT" in part: audit_content = part.replace("REPORT", "").strip()
-                        if "WHATSAPP" in part: whatsapp_content = part.replace("WHATSAPP", "").strip()
-                        if "EMAIL" in part: email_content = part.replace("EMAIL", "").strip()
-                except:
-                    audit_content = full_response
-                    whatsapp_content = "Please retry for messaging."
-                    email_content = "Please retry for messaging."
-
-                st.success("Success!")
-                tab1, tab2, tab3 = st.tabs(["📊 Audit Report", "💬 WhatsApp", "✉️ Email"])
+                # SPLITTING INTO TABS
+                sections = full_text.split("---")
+                audit_out = ""
+                wa_out = ""
+                email_out = ""
                 
-                with tab1:
-                    st.write(f"**SEO:** {seo_score} | **Speed:** {perf_score}")
-                    st.markdown(audit_content)
+                for s in sections:
+                    if "REPORT" in s: audit_out = s.replace("REPORT", "").strip()
+                    if "WHATSAPP" in s: wa_out = s.replace("WHATSAPP", "").strip()
+                    if "EMAIL" in s: email_out = s.replace("EMAIL", "").strip()
+
+                st.success("Analysis Complete!")
+                t1, t2, t3 = st.tabs(["📊 Audit Report", "💬 WhatsApp Pitch", "✉️ Email Campaign"])
+                
+                with t1:
+                    st.write(f"**SEO Score:** {seo_score} | **Speed:** {perf_score}")
+                    st.markdown(audit_out)
                     try:
                         pdf = FPDF()
                         pdf.add_page()
                         pdf.set_font("Helvetica", size=12)
-                        clean_report = audit_content.encode('latin-1', 'ignore').decode('latin-1')
-                        pdf.multi_cell(0, 10, txt=clean_report)
-                        st.download_button("Download PDF", bytes(pdf.output()), "Audit.pdf", "application/pdf")
-                    except: st.write("Download unavailable, copy text above.")
+                        clean = audit_out.encode('latin-1', 'ignore').decode('latin-1')
+                        pdf.multi_cell(0, 10, txt=clean)
+                        st.download_button("📩 Download PDF Report", bytes(pdf.output()), "Audit.pdf", "application/pdf")
+                    except: st.write("Copy report text manually.")
 
-                with tab2:
-                    st.code(whatsapp_content, language="text")
+                with t2:
+                    st.subheader("WhatsApp Pitch (Short & Crisp)")
+                    st.code(wa_out, language="text")
+                    st.caption("Copy and paste this into WhatsApp Web.")
 
-                with tab3:
-                    st.code(email_content, language="text")
+                with t3:
+                    st.subheader("Email Pitch (High Conversion)")
+                    st.code(email_out, language="text")
+                    st.caption("Use Subject Line 1 for highest open rates.")
