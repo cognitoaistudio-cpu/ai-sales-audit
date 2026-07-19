@@ -20,7 +20,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. DUAL-STYLE PDF ENGINE (STABILITY FIXED)
+# 2. DUAL-STYLE PDF ENGINE
 class CognitoPDF(FPDF):
     def __init__(self, report_type="CLIENT", biz_name=""):
         super().__init__()
@@ -28,7 +28,6 @@ class CognitoPDF(FPDF):
         self.biz_name = biz_name
 
     def header(self):
-        # We use (TM) instead of the symbol to prevent encoding crashes
         if self.report_type == "CLIENT":
             self.set_fill_color(30, 58, 138) # Navy Blue
             self.rect(0, 0, 210, 35, 'F')
@@ -50,7 +49,7 @@ class CognitoPDF(FPDF):
         self.cell(0, 10, f'Page {self.page_no()} | Cognito AI Studio Audit for {self.biz_name}', 0, 0, 'C')
 
 def safe_text(text):
-    # This removes emojis and special symbols that crash standard PDF fonts
+    # Removes emojis and special symbols that crash standard PDF fonts
     return text.encode('ascii', 'ignore').decode('ascii')
 
 # 3. CORE LOGIC
@@ -60,11 +59,11 @@ def get_scores(url, api_key):
         r = requests.get(api_url).json()
         lh = r['lighthouseResult']['categories']
         return round(lh['seo']['score']*100), round(lh['performance']['score']*100)
-    except: return 50, 50
+    except:
+        return 50, 50
 
 def run_dual_analysis(biz_data, tech_scores, gemini_key):
     genai.configure(api_key=gemini_key)
-    # Target Gemini 3 Flash Preview
     model = genai.GenerativeModel("gemini-3-flash-preview")
     
     scrape_url = f"https://r.jina.ai/{biz_data['url']}"
@@ -81,7 +80,7 @@ def run_dual_analysis(biz_data, tech_scores, gemini_key):
     [CLIENT_REPORT]
     1. Overall Digital Health Score out of 100.
     2. Executive Summary. 
-    3. AI Readiness Checklist (✅/❌).
+    3. AI Readiness Checklist (use text symbols like YES/NO instead of emojis).
     4. WhatsApp Gap: Explain why their manual reply system is losing them revenue.
     5. The Solution: Why a 24/7 AI Chatbot is the priority.
     6. ROI Estimator table.
@@ -89,11 +88,11 @@ def run_dual_analysis(biz_data, tech_scores, gemini_key):
     [INTERNAL_REPORT]
     1. Lead Qualification (High/Medium/Low priority).
     2. Competitor Intelligence: Compare them to 2 local rivals in {biz_data['city']}.
-    3. Objection Prep: How to handle 'We don't need AI'.
+    3. Objection Prep: How to handle 'We already use WhatsApp'.
     4. Sales Strategy: Phase 1 to 3 plan.
 
     [OUTREACH]
-    1. WhatsApp: Crisp pitch for the owner.
+    1. WhatsApp: Crisp pitch for the owner focusing on manual vs automated replies.
     2. Email: Click-worthy Subject + PAS body.
     """
     return model.generate_content(prompt).text
@@ -103,8 +102,8 @@ st.title("🤖 Cognito AI Sales Copilot")
 
 with st.sidebar:
     st.header("🏢 Target Profile")
-    b_name = st.text_input("Business Name")
-    b_url = st.text_input("Website URL")
+    b_name = st.text_input("Business Name", value="Local Business")
+    b_url = st.text_input("Website URL (https://...)")
     b_city = st.text_input("City")
     
     st.divider()
@@ -117,13 +116,18 @@ if st.button("🚀 Generate Cognito Intelligence"):
         st.error("Please fill all fields and provide a Gemini API Key.")
     else:
         with st.spinner("Analyzing Website & Competitors..."):
+            # Run Technical Scan
             seo, speed = get_scores(b_url, ps_key)
+            
+            # Run AI Intelligence
             raw_report = run_dual_analysis({"name": b_name, "url": b_url, "city": b_city}, (seo, speed), g_key)
             
-            # PARSING
+            # PARSING FUNCTIONS
             def clean_sec(text, tag):
-                try: return text.split(f"[{tag}]")[1].split("[")[0].strip()
-                except: return "Content generation failed."
+                try:
+                    return text.split(f"[{tag}]")[1].split("[")[0].strip()
+                except:
+                    return "Content generation failed for this section."
 
             client_txt = clean_sec(raw_report, "CLIENT_REPORT")
             internal_txt = clean_sec(raw_report, "INTERNAL_REPORT")
@@ -143,21 +147,43 @@ if st.button("🚀 Generate Cognito Intelligence"):
                 st.markdown("---")
                 st.markdown(client_txt)
                 
-                # CLIENT PDF
+                # CLIENT PDF GENERATION
                 try:
                     pdf_c = CognitoPDF("CLIENT", b_name)
                     pdf_c.add_page()
                     pdf_c.set_font("Arial", size=11)
-                    # Clean the AI text before putting it into the PDF
                     pdf_c.multi_cell(0, 8, safe_text(client_txt))
-                    st.download_button("📩 Download Client Health Report", bytes(pdf_c.output()), f"{b_name}_Client_Audit.pdf", mime="application/pdf")
+                    pdf_data = pdf_c.output()
+                    st.download_button(
+                        label="📩 Download Client Health Report",
+                        data=bytes(pdf_data),
+                        file_name=f"{b_name}_Client_Audit.pdf",
+                        mime="application/pdf"
+                    )
                 except Exception as e:
-                    st.error(f"PDF Error: {e}")
+                    st.error(f"Client PDF Error: {e}")
 
             with tab2:
                 st.warning("INTERNAL USE ONLY - Confidential Strategy")
                 st.markdown(internal_txt)
                 
-                # INTERNAL PDF
+                # INTERNAL PDF GENERATION
                 try:
                     pdf_i = CognitoPDF("INTERNAL", b_name)
+                    pdf_i.add_page()
+                    pdf_i.set_font("Arial", size=10)
+                    pdf_i.multi_cell(0, 7, safe_text(internal_txt))
+                    pdf_data_i = pdf_i.output()
+                    st.download_button(
+                        label="🕵️ Download Internal Intelligence",
+                        data=bytes(pdf_data_i),
+                        file_name=f"{b_name}_Internal_Strategy.pdf",
+                        mime="application/pdf"
+                    )
+                except Exception as e:
+                    st.error(f"Internal PDF Error: {e}")
+
+            with tab3:
+                st.subheader("WhatsApp & Email Pitches")
+                st.info("Direct Response Marketing Copy (One-click copy)")
+                st.code(outreach_txt, language="text")
