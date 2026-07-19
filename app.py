@@ -3,119 +3,127 @@ import google.generativeai as genai
 import requests
 from fpdf import FPDF
 
-st.set_page_config(page_title="AI Sales Auditor", layout="wide")
-st.title("🚀 AI Sales Intelligence & Outreach")
+# 1. SETUP PAGE
+st.set_page_config(page_title="AI Sales Intelligence 3.0", layout="wide")
+st.title("🚀 AI Sales Intelligence (Gemini 3 Powered)")
 
-# 1. SIDEBAR SETUP
+# 2. SIDEBAR SETUP
 with st.sidebar:
-    st.header("Setup")
+    st.header("🔑 API Setup")
     gemini_key = st.text_input("Enter Gemini API Key", type="password").strip()
     google_key = st.text_input("Enter PageSpeed API Key", type="password").strip()
     
     st.divider()
-    # MANUAL MODEL PICKER - If one fails, user can pick another
-    st.subheader("AI Settings")
-    model_choice = st.selectbox(
-        "Select AI Model",
-        ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"],
-        help="If you get a 404 error, try switching to gemini-1.5-flash"
-    )
-    st.info("Tip: gemini-1.5-flash is usually the most stable free model.")
+    st.subheader("🤖 Current Model")
+    st.success("gemini-3-flash-preview")
+    st.caption("Optimized for complex business reasoning.")
 
-# 2. THE AI FUNCTION
-def run_ai_audit(target_url, seo, perf, api_key, model_name):
+# 3. CORE FUNCTIONS
+def run_gemini3_audit(target_url, seo, perf, api_key):
     try:
         genai.configure(api_key=api_key)
+        
+        # Hardcoded to Gemini 3 Flash Preview as requested
+        model_name = "gemini-3-flash-preview"
         model = genai.GenerativeModel(model_name)
         
-        # Get Website Data
+        # Get Website Context via Jina
         scrape_url = f"https://r.jina.ai/{target_url}"
         try:
-            web_content = requests.get(scrape_url, timeout=10).text[:3000]
+            web_content = requests.get(scrape_url, timeout=12).text[:4000]
         except:
-            web_content = "Unable to read website content."
-        
+            web_content = "Website text could not be extracted."
+
+        # GEMINI 3 OPTIMIZED PROMPT
+        # We use Gemini 3's advanced reasoning to find deep revenue leaks
         prompt = f"""
-        Act as a Sales Marketer. 
-        Audit this business: {target_url}
-        Data: SEO {seo}, Speed {perf}
-        Website Content: {web_content}
+        System: You are an elite Business Growth Consultant using Gemini 3 Reasoning.
+        Task: Analyze {target_url} for a high-ticket sales audit.
         
-        Format your response exactly as follows:
+        Data: SEO Score {seo}/100, Performance {perf}/100.
+        Context: {web_content}
+
+        Instructions:
+        1. Identify the 'Invisible Gap' - where is this business losing money that they don't see?
+        2. Look for missing AI Agents (Receptionists, Lead Qualifiers, Support Bots).
+        3. Create outreach that sounds like a peer, not a bot.
+
+        Format exactly with '---':
         ---REPORT---
-        (Detailed business audit with revenue leaks)
+        (The Professional Audit)
         ---WHATSAPP---
-        (Short pitch with emojis)
+        (Crisp, emoji-rich, PAS-style message)
         ---EMAIL---
-        (Subject + PAS framework body)
+        (3 Subject Lines + High-conversion body)
         """
         
         response = model.generate_content(prompt)
         return response.text
 
     except Exception as e:
+        if "404" in str(e):
+            return "ERROR: Model 'gemini-3-flash-preview' not found in your region. Check Google AI Studio for the exact name."
         return f"ERROR: {str(e)}"
 
-# 3. THE UI
-target_url = st.text_input("Enter Website URL (e.g., https://example.com)")
+# 4. THE UI
+target_url = st.text_input("Enter Business URL (e.g., https://example.com)")
 
-if st.button("Generate Audit & Outreach"):
+if st.button("Generate Gemini 3 Audit"):
     if not gemini_key or not google_key:
-        st.warning("Please enter both API keys in the sidebar.")
+        st.warning("Please enter your API keys in the sidebar.")
     else:
-        with st.spinner(f"Using {model_choice} to analyze..."):
-            # 1. Get PageSpeed Data
+        with st.spinner("Gemini 3 is thinking... (Analyzing deeper than ever)"):
+            # 1. PageSpeed Call
             ps_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={target_url}&category=SEO&category=PERFORMANCE&key={google_key}"
             try:
                 r = requests.get(ps_url).json()
-                seo = r['lighthouseResult']['categories']['seo']['score'] * 100
-                perf = r['lighthouseResult']['categories']['performance']['score'] * 100
+                seo_val = r['lighthouseResult']['categories']['seo']['score'] * 100
+                perf_val = r['lighthouseResult']['categories']['performance']['score'] * 100
             except:
-                seo, perf = "N/A", "N/A"
+                seo_val, perf_val = "N/A", "N/A"
 
-            # 2. Run AI Audit
-            result = run_ai_audit(target_url, seo, perf, gemini_key, model_choice)
+            # 2. Gemini 3 Call
+            raw_result = run_gemini3_audit(target_url, seo_val, perf_val, gemini_key)
             
-            if "ERROR" in result:
-                st.error(result)
-                st.info("Try selecting a different model in the sidebar and clicking the button again.")
+            if "ERROR" in raw_result:
+                st.error(raw_result)
             else:
-                st.success("Audit & Outreach Ready!")
+                st.success("Gemini 3 Audit Complete!")
                 
-                # Split result safely
-                parts = result.split("---")
-                # Default empty content
-                report_text = result
-                wa_text = "Message generation failed. Copy from report."
-                email_text = "Message generation failed. Copy from report."
+                # Split parts
+                parts = raw_result.split("---")
+                audit_part = ""
+                wa_part = ""
+                email_part = ""
                 
-                # Assign parts based on labels
-                for part in parts:
-                    if "REPORT" in part: report_text = part.replace("REPORT", "").strip()
-                    if "WHATSAPP" in part: wa_text = part.replace("WHATSAPP", "").strip()
-                    if "EMAIL" in part: email_text = part.replace("EMAIL", "").strip()
+                for p in parts:
+                    if "REPORT" in p: audit_part = p.replace("REPORT", "").strip()
+                    if "WHATSAPP" in p: wa_part = p.replace("WHATSAPP", "").strip()
+                    if "EMAIL" in p: email_part = p.replace("EMAIL", "").strip()
 
                 # TABS
-                tab1, tab2, tab3 = st.tabs(["📊 Audit Report", "💬 WhatsApp Pitch", "✉️ Email Campaign"])
+                t1, t2, t3 = st.tabs(["📊 Deep Audit", "💬 WhatsApp Pitch", "✉️ Email Outreach"])
                 
-                with tab1:
-                    st.metric("SEO Score", f"{seo}%")
-                    st.metric("Speed Score", f"{perf}%")
-                    st.markdown(report_text)
-                    # Simple PDF button
+                with t1:
+                    col1, col2 = st.columns(2)
+                    col1.metric("SEO Health", f"{seo_val}%")
+                    col2.metric("Load Speed", f"{perf_val}%")
+                    st.markdown(audit_part)
+                    
+                    # PDF Generation
                     try:
                         pdf = FPDF()
                         pdf.add_page()
-                        pdf.set_font("Arial", size=12)
-                        pdf.multi_cell(0, 10, txt=report_text.encode('latin-1', 'ignore').decode('latin-1'))
-                        st.download_button("📩 Download PDF", bytes(pdf.output()), "Audit.pdf", "application/pdf")
-                    except: pass
+                        pdf.set_font("Helvetica", size=12)
+                        pdf_clean = audit_part.encode('latin-1', 'ignore').decode('latin-1')
+                        pdf.multi_cell(0, 10, txt=f"Gemini 3 Audit: {target_url}\n\n" + pdf_clean)
+                        st.download_button("📩 Download PDF Report", bytes(pdf.output()), f"Audit_{target_url}.pdf", "application/pdf")
+                    except: st.info("Copy report manually.")
 
-                with tab2:
-                    st.subheader("WhatsApp Message")
-                    st.code(wa_text, language="text")
-                    st.caption("Click the icon top-right to copy.")
+                with t2:
+                    st.code(wa_part, language="text")
+                    st.caption("Short and punchy for direct messaging.")
 
-                with tab3:
-                    st.subheader("Email Pitch")
-                    st.code(email_text, language="text")
+                with t3:
+                    st.code(email_part, language="text")
+                    st.caption("Professional outreach with Subject Line options.")
