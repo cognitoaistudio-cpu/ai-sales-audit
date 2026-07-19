@@ -4,8 +4,8 @@ import google.generativeai as genai
 from fpdf import FPDF
 
 # 1. SETUP PAGE
-st.set_page_config(page_title="AI Sales Auditor", layout="wide")
-st.title("🚀 AI Business Audit & Sales Copilot")
+st.set_page_config(page_title="AI Sales Intelligence", layout="wide")
+st.title("🚀 AI Sales Intelligence & Outreach")
 
 # 2. SIDEBAR
 with st.sidebar:
@@ -13,7 +13,7 @@ with st.sidebar:
     gemini_key = st.text_input("Enter Gemini API Key", type="password")
     google_key = st.text_input("Enter PageSpeed API Key", type="password")
     st.divider()
-    st.info("I will automatically find the best available AI model for your key.")
+    st.info("Your AI Outreach is tuned for high conversion rates.")
 
 # 3. CORE FUNCTIONS
 def get_audit_data(url, api_key):
@@ -26,47 +26,42 @@ def get_audit_data(url, api_key):
     except:
         return "N/A", "N/A"
 
-def analyze_with_ai(url, seo, perf, gemini_key):
+def analyze_and_write(url, seo, perf, gemini_key):
     try:
         genai.configure(api_key=gemini_key)
-        
-        # FIND THE BEST MODEL AUTOMATICALLY
+        # Dynamic model selection
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        best_model = next((m for m in ['models/gemini-1.5-flash', 'models/gemini-2.0-flash', 'models/gemini-pro'] if m in available_models), available_models[0])
         
-        # Preferred models in order of quality/speed
-        preferred = ['models/gemini-3.5-flash', 'models/gemini-2.0-flash', 'models/gemini-1.5-flash', 'models/gemini-pro']
-        
-        best_model = None
-        for p in preferred:
-            if p in available_models:
-                best_model = p
-                break
-        
-        if not best_model:
-            # If none of the preferred are found, just take the first one available
-            best_model = available_models[0] if available_models else None
-
-        if not best_model:
-            return "TECHNICAL ERROR: No models available for this API key."
-
-        st.write(f"⚙️ Using model: {best_model}")
         model = genai.GenerativeModel(best_model)
-        
-        # Scrape Content
         scrape_url = f"https://r.jina.ai/{url}"
         web_text = requests.get(scrape_url).text[:4000]
         
+        # MARKETING PROMPT
         prompt = f"""
-        You are a Sales Intelligence Consultant. 
+        Act as a World-Class Sales Consultant and Direct Response Marketer.
         Website: {url}
-        Data: {web_text}
-        SEO Score: {seo}/100, Performance: {perf}/100.
+        Data: SEO {seo}/100, Speed {perf}/100.
+        Web Context: {web_text}
+
+        TASK:
+        1. Generate a Professional Audit Report.
+        2. Generate a 'Short & Crisp' WhatsApp Pitch (include emojis, max 50 words).
+        3. Generate a High-Conversion Email (3 Subject Line options + Body).
         
-        Write a professional audit for this business. 
-        Focus on:
-        1. AI Readiness (Are they using chatbots/automation?)
-        2. Customer Conversion Gaps (Speed, SEO, UX)
-        3. A persuasive closing statement on how AI can increase their revenue.
+        MARKETING RULES:
+        - Lead with the 'Gap' (what they are missing).
+        - Use the PAS (Problem, Agitate, Solve) framework.
+        - Focus on 'Leaking Revenue' or 'Missed Leads'.
+        - Call to Action (CTA) must be low-friction (e.g., 'Open to a quick chat?').
+
+        FORMAT:
+        ---REPORT---
+        (The Audit)
+        ---WHATSAPP---
+        (The WhatsApp message)
+        ---EMAIL---
+        (The Email)
         """
         
         response = model.generate_content(prompt)
@@ -78,37 +73,48 @@ def analyze_with_ai(url, seo, perf, gemini_key):
 # 4. THE USER INTERFACE
 target_url = st.text_input("Enter Business Website (e.g., https://example.com)")
 
-if st.button("Start Audit"):
+if st.button("Generate Audit & Outreach"):
     if not gemini_key or not google_key:
-        st.error("Please provide both API keys in the sidebar.")
+        st.error("Please add keys in the sidebar.")
     else:
-        with st.spinner("Running Audit..."):
+        with st.spinner("Analyzing & Writing your pitch..."):
             seo_score, perf_score = get_audit_data(target_url, google_key)
-            report = analyze_with_ai(target_url, seo_score, perf_score, gemini_key)
+            full_response = analyze_and_write(target_url, seo_score, perf_score, gemini_key)
             
-            if "TECHNICAL ERROR" in report:
-                st.error(report)
+            if "TECHNICAL ERROR" in full_response:
+                st.error(full_response)
             else:
-                st.success("Audit Complete!")
-                st.write(f"**SEO Score:** {seo_score} | **Speed Score:** {perf_score}")
-                st.markdown(report)
-                
-                # PDF Generation (Fixed for Streamlit download)
+                # SPLITTING THE DATA
                 try:
+                    parts = full_response.split("---")
+                    audit_content = parts[2].replace("REPORT---", "").strip()
+                    whatsapp_content = parts[4].replace("WHATSAPP---", "").strip()
+                    email_content = parts[6].replace("EMAIL---", "").strip()
+                except:
+                    # Fallback if split fails
+                    audit_content, whatsapp_content, email_content = full_response, "Error splitting", "Error splitting"
+
+                st.success("Audit & Outreach Generated!")
+                
+                # UI TABS
+                tab1, tab2, tab3 = st.tabs(["📊 Audit Report", "💬 WhatsApp Pitch", "✉️ Email Campaign"])
+                
+                with tab1:
+                    st.write(f"**SEO:** {seo_score} | **Speed:** {perf_score}")
+                    st.markdown(audit_content)
+                    # PDF Download
                     pdf = FPDF()
                     pdf.add_page()
                     pdf.set_font("Helvetica", size=12)
-                    # Clean text for PDF
-                    clean_report = report.encode('latin-1', 'ignore').decode('latin-1')
-                    pdf.multi_cell(0, 10, txt=f"Audit for {target_url}\n\n" + clean_report)
-                    
-                    # This converts the PDF to something the button can send
-                    pdf_bytes = pdf.output()
-                    st.download_button(
-                        label="📩 Download PDF Report",
-                        data=bytes(pdf_bytes),
-                        file_name="Business_Audit.pdf",
-                        mime="application/pdf"
-                    )
-                except Exception as pdf_error:
-                    st.warning("Audit generated, but PDF failed. You can copy the text above.")
+                    pdf.multi_cell(0, 10, txt=f"Audit for {target_url}\n\n" + audit_content.encode('latin-1', 'ignore').decode('latin-1'))
+                    st.download_button("📩 Download PDF Report", bytes(pdf.output()), "Audit.pdf", "application/pdf")
+
+                with tab2:
+                    st.info("Click the copy icon in the top right of the box below.")
+                    st.code(whatsapp_content, language="text")
+                    st.caption("Pro Tip: Send this to the business owner on WhatsApp for the fastest response.")
+
+                with tab3:
+                    st.info("Copy-paste this into your email provider.")
+                    st.code(email_content, language="text")
+                    st.caption("Pro Tip: Use the first subject line for the highest open rates.")
