@@ -20,7 +20,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. DUAL-STYLE PDF ENGINE
+# 2. DUAL-STYLE PDF ENGINE (STABILITY FIXED)
 class CognitoPDF(FPDF):
     def __init__(self, report_type="CLIENT", biz_name=""):
         super().__init__()
@@ -28,13 +28,13 @@ class CognitoPDF(FPDF):
         self.biz_name = biz_name
 
     def header(self):
-        # Header Branding
+        # We use (TM) instead of the symbol to prevent encoding crashes
         if self.report_type == "CLIENT":
             self.set_fill_color(30, 58, 138) # Navy Blue
             self.rect(0, 0, 210, 35, 'F')
             self.set_text_color(255, 255, 255)
             self.set_font('Arial', 'B', 16)
-            self.cell(0, 15, 'COGNITO AI BUSINESS HEALTH REPORT™', ln=True, align='C')
+            self.cell(0, 15, 'COGNITO AI BUSINESS HEALTH REPORT (TM)', ln=True, align='C')
         else:
             self.set_fill_color(220, 38, 38) # Red for Internal
             self.rect(0, 0, 210, 35, 'F')
@@ -47,19 +47,24 @@ class CognitoPDF(FPDF):
         self.set_y(-15)
         self.set_font('Arial', 'I', 8)
         self.set_text_color(128, 128, 128)
-        self.cell(0, 10, f'Page {self.page_no()} | Prepared by Cognito AI Studio for {self.biz_name}', 0, 0, 'C')
+        self.cell(0, 10, f'Page {self.page_no()} | Cognito AI Studio Audit for {self.biz_name}', 0, 0, 'C')
+
+def safe_text(text):
+    # This removes emojis and special symbols that crash standard PDF fonts
+    return text.encode('ascii', 'ignore').decode('ascii')
 
 # 3. CORE LOGIC
 def get_scores(url, api_key):
-    api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&category=SEO&category=PERFORMANCE&category=ACCESSIBILITY&key={api_key}"
+    api_url = f"https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url={url}&category=SEO&category=PERFORMANCE&key={api_key}"
     try:
         r = requests.get(api_url).json()
         lh = r['lighthouseResult']['categories']
-        return round(lh['seo']['score']*100), round(lh['performance']['score']*100), round(lh['accessibility']['score']*100)
-    except: return 50, 50, 50
+        return round(lh['seo']['score']*100), round(lh['performance']['score']*100)
+    except: return 50, 50
 
 def run_dual_analysis(biz_data, tech_scores, gemini_key):
     genai.configure(api_key=gemini_key)
+    # Target Gemini 3 Flash Preview
     model = genai.GenerativeModel("gemini-3-flash-preview")
     
     scrape_url = f"https://r.jina.ai/{biz_data['url']}"
@@ -67,28 +72,29 @@ def run_dual_analysis(biz_data, tech_scores, gemini_key):
     
     prompt = f"""
     You are the Senior Strategy Lead at Cognito AI Studio.
-    Target: {biz_data['name']} in {biz_data['city']}. Industry: {biz_data['industry']}.
-    Technical Stats: SEO {tech_scores[0]}, Speed {tech_scores[1]}, Accessibility {tech_scores[2]}.
-    Web Data: {web_text}
+    Target: {biz_data['name']} in {biz_data['city']}. 
+    Technical Stats: SEO {tech_scores[0]}, Speed {tech_scores[1]}.
+    Web Data Snippet: {web_text}
 
-    TASK: Generate TWO distinct reports using these exact markers.
+    Generate TWO distinct reports. Use these exact markers:
 
     [CLIENT_REPORT]
-    1. Executive Summary: Digital Scorecard (SEO, Speed, AI Readiness). 
-    2. Customer Journey: Highlight how their current manual WhatsApp button creates friction.
-    3. AI Opportunity: Why an AI Chatbot/Agent is their #1 priority.
-    4. ROI Estimator: Potential impact of 24/7 automation.
+    1. Overall Digital Health Score out of 100.
+    2. Executive Summary. 
+    3. AI Readiness Checklist (✅/❌).
+    4. WhatsApp Gap: Explain why their manual reply system is losing them revenue.
+    5. The Solution: Why a 24/7 AI Chatbot is the priority.
+    6. ROI Estimator table.
 
     [INTERNAL_REPORT]
-    1. Lead Qualification: Budget potential (High/Medium/Low) and Sales Priority.
-    2. Technical Debt: Hidden issues in their site.
-    3. Competitor Intelligence: Compare them to 2 local rivals in {biz_data['city']}.
-    4. Objection Prep: Anticipate and answer "We use manual WhatsApp, it's fine."
-    5. Proposal Builder: Phase 1 (Chatbot), Phase 2 (WhatsApp Automation), Phase 3 (CRM).
+    1. Lead Qualification (High/Medium/Low priority).
+    2. Competitor Intelligence: Compare them to 2 local rivals in {biz_data['city']}.
+    3. Objection Prep: How to handle 'We don't need AI'.
+    4. Sales Strategy: Phase 1 to 3 plan.
 
     [OUTREACH]
-    1. WhatsApp: Crisp pitch focusing on the "Manual Reply Trap".
-    2. Email: Click-worthy Subject lines + PAS body.
+    1. WhatsApp: Crisp pitch for the owner.
+    2. Email: Click-worthy Subject + PAS body.
     """
     return model.generate_content(prompt).text
 
@@ -100,7 +106,6 @@ with st.sidebar:
     b_name = st.text_input("Business Name")
     b_url = st.text_input("Website URL")
     b_city = st.text_input("City")
-    b_ind = st.selectbox("Industry", ["Healthcare", "Real Estate", "Home Services", "Legal", "Retail"])
     
     st.divider()
     st.header("🔑 API Access")
@@ -109,11 +114,11 @@ with st.sidebar:
 
 if st.button("🚀 Generate Cognito Intelligence"):
     if not (b_name and b_url and g_key):
-        st.error("Please fill all fields.")
+        st.error("Please fill all fields and provide a Gemini API Key.")
     else:
-        with st.spinner("Module 1-4: Running Technical Audit & AI Detection..."):
-            seo, speed, acc = get_scores(b_url, ps_key)
-            raw_report = run_dual_analysis({"name": b_name, "url": b_url, "city": b_city, "industry": b_ind}, (seo, speed, acc), g_key)
+        with st.spinner("Analyzing Website & Competitors..."):
+            seo, speed = get_scores(b_url, ps_key)
+            raw_report = run_dual_analysis({"name": b_name, "url": b_url, "city": b_city}, (seo, speed), g_key)
             
             # PARSING
             def clean_sec(text, tag):
@@ -127,36 +132,32 @@ if st.button("🚀 Generate Cognito Intelligence"):
             st.success("Analysis Complete.")
 
             # --- TABS ---
-            tab1, tab2, tab3 = st.tabs(["📄 Client Report™", "🔐 Internal Intelligence", "✉️ Outreach Copy"])
+            tab1, tab2, tab3 = st.tabs(["📄 Client Report", "🔐 Internal Intelligence", "✉️ Outreach Copy"])
 
             with tab1:
                 st.markdown(f"### {b_name} - Health Score")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Overall Score", "62/100")
-                c2.metric("AI Readiness", "28/100", "-15%")
-                c3.metric("Customer Journey", "54/100")
+                c1, c2 = st.columns(2)
+                c1.metric("SEO Score", f"{seo}%")
+                c2.metric("Site Speed", f"{speed}%")
                 
                 st.markdown("---")
                 st.markdown(client_txt)
                 
                 # CLIENT PDF
-                pdf_c = CognitoPDF("CLIENT", b_name)
-                pdf_c.add_page()
-                pdf_c.set_font("Arial", size=11)
-                pdf_c.multi_cell(0, 8, client_txt.encode('latin-1', 'ignore').decode('latin-1'))
-                st.download_button("📩 Download Client Health Report™", bytes(pdf_c.output()), f"{b_name}_Health_Report.pdf")
+                try:
+                    pdf_c = CognitoPDF("CLIENT", b_name)
+                    pdf_c.add_page()
+                    pdf_c.set_font("Arial", size=11)
+                    # Clean the AI text before putting it into the PDF
+                    pdf_c.multi_cell(0, 8, safe_text(client_txt))
+                    st.download_button("📩 Download Client Health Report", bytes(pdf_c.output()), f"{b_name}_Client_Audit.pdf", mime="application/pdf")
+                except Exception as e:
+                    st.error(f"PDF Error: {e}")
 
             with tab2:
                 st.warning("INTERNAL USE ONLY - Confidential Strategy")
                 st.markdown(internal_txt)
                 
                 # INTERNAL PDF
-                pdf_i = CognitoPDF("INTERNAL", b_name)
-                pdf_i.add_page()
-                pdf_i.set_font("Arial", size=10)
-                pdf_i.multi_cell(0, 7, internal_txt.encode('latin-1', 'ignore').decode('latin-1'))
-                st.download_button("🕵️ Download Internal Intelligence", bytes(pdf_i.output()), f"{b_name}_Internal_Strategy.pdf")
-
-            with tab3:
-                st.subheader("WhatsApp & Email Pitches")
-                st.code(outreach_txt, language="text")
+                try:
+                    pdf_i = CognitoPDF("INTERNAL", b_name)
